@@ -378,8 +378,12 @@ func (a *AzureProvider) createOrUpdateRecord(
 			a.metrics.RecordAPICall(
 				"azure", http.MethodPut,
 				fmt.Sprintf(
-					"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/A/%s",
-					a.subscriptionID, a.resourceGroupName, a.zoneName, recordName,
+					"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/%s/%s",
+					a.subscriptionID,
+					a.resourceGroupName,
+					a.zoneName,
+					recordType,
+					recordName,
 				),
 				success, time.Since(start),
 			)
@@ -413,7 +417,7 @@ func (a *AzureProvider) createOrUpdateRecord(
 				IPv4Address: ip,
 			}
 		}
-	} else {
+} else {
 	properties.AAAARecords = make([]azureAAAARecord, len(ips))
 
 	for i, ip := range ips {
@@ -434,7 +438,13 @@ recordSet := azureRecordSet{
 
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPut, url, bytes.NewReader(jsonData))
+
+	req, err := http.NewRequestWithContext(
+		reqCtx,
+		http.MethodPut,
+		requestURL,
+		bytes.NewReader(jsonData),
+)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
@@ -468,8 +478,12 @@ func (a *AzureProvider) deleteRecord(
 		defer func() {
 			a.metrics.RecordAPICall("azure", http.MethodDelete,
 				fmt.Sprintf(
-					"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/A/%s",
-					a.subscriptionID, a.resourceGroupName, a.zoneName, recordName,
+					"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/%s/%s",
+						a.subscriptionID,
+						a.resourceGroupName,
+						a.zoneName,
+						recordType,
+						recordName,
 				),
 				success, time.Since(start),
 			)
@@ -491,16 +505,15 @@ func (a *AzureProvider) deleteRecord(
 		recordName,
 	)
 
-	req, err := http.NewRequestWithContext(
-	reqCtx,
-	http.MethodDelete,
-	requestURL,
-	nil,
-	)
-
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodDelete, url, nil)
+
+	req, err := http.NewRequestWithContext(
+		reqCtx,
+		http.MethodDelete,
+		requestURL,
+		nil,
+	)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
