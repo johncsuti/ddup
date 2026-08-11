@@ -119,15 +119,16 @@ func (a *AzureProvider) UpdateRecords(ctx context.Context, domain string, ttl in
 		{recordType: recordTypeA, ips: ipv4},
 		{recordType: recordTypeAAAA, ips: ipv6},
 	} {
-	err = a.updateRecordType(
-		ctx,
-		domain,
-		records.recordType,
-		ttl,
-		records.ips,
-	)
-	if err != nil {
-		return err
+		err = a.updateRecordType(
+			ctx,
+			domain,
+			records.recordType,
+			ttl,
+			records.ips,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
