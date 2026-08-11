@@ -119,15 +119,15 @@ func (a *AzureProvider) UpdateRecords(ctx context.Context, domain string, ttl in
 		{recordType: recordTypeA, ips: ipv4},
 		{recordType: recordTypeAAAA, ips: ipv6},
 	} {
-		if err = a.updateRecordType(
-			ctx,
-			domain,
-			records.recordType,
-			ttl,
-			records.ips,
-		); err != nil {
-			return err
-		}
+	err = a.updateRecordType(
+		ctx,
+		domain,
+		records.recordType,
+		ttl,
+		records.ips,
+	)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -162,15 +162,15 @@ func (a *AzureProvider) updateRecordType(
 			slog.String("recordName", recordName),
 			slog.String("recordType", recordType),
 		)
-
-		if err = a.deleteRecord(ctx, recordName, recordType); err != nil {
-			return fmt.Errorf(
-				"error deleting %s record for domain %s: %w",
-				recordType,
-				domain,
-				err,
-			)
-		}
+	err = a.deleteRecord(ctx, recordName, recordType)
+	if err != nil {
+		return fmt.Errorf(
+			"error deleting %s record for domain %s: %w",
+			recordType,
+			domain,
+			err,
+		)
+	}
 
 		return nil
 	}
@@ -193,13 +193,14 @@ func (a *AzureProvider) updateRecordType(
 		slog.Any("ips", ips),
 	)
 
-	if err = a.createOrUpdateRecord(
+	err = a.createOrUpdateRecord(
 		ctx,
 		recordName,
 		recordType,
 		ips,
 		ttl,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf(
 			"error creating/updating %s record for domain %s: %w",
 			recordType,
@@ -223,6 +224,7 @@ type azureAAAARecord struct {
 
 // azureRecordProperties represents a record's properties from the Azure DNS API
 //
+//nolint:tagliatelle
 type azureRecordProperties struct {
 	TTL         int               `json:"TTL"`
 	ARecords    []azureARecord    `json:"ARecords,omitempty"`
