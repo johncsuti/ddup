@@ -105,50 +105,112 @@ func (a *AzureProvider) Name() string {
 	return a.name
 }
 
-// UpdateRecords updates DNS records for the given domain with the provided IPs
-func (a *AzureProvider) UpdateRecords(ctx context.Context, domain string, ttl int, ips []string) error {
-	// First, get existing records
-	currentIPs, err := a.getExistingIPs(ctx, domain)
+// UpdateRecords updates DNS A and AAAA records for the given domain with the provided IPs.
+func (a *AzureProvider) UpdateRecords(
+	ctx context.Context,
+	domain string,
+	ttl int,
+	ips []string,
+) error {
+	ipv4, ipv6, err := splitIPs(ips)
 	if err != nil {
-		return fmt.Errorf("error getting existing records: %w", err)
+		return err
 	}
 
-	// Get record name from domain
+	for _, records := range []struct {
+		recordType string
+		ips        []string
+	}{
+		{recordType: recordTypeA, ips: ipv4},
+		{recordType: recordTypeAAAA, ips: ipv6},
+	} {
+		if err = a.updateRecordType(
+			ctx,
+			domain,
+			records.recordType,
+			ttl,
+			records.ips,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (a *AzureProvider) updateRecordType(
+	ctx context.Context,
+	domain string,
+	recordType string,
+	ttl int,
+	ips []string,
+) error {
+	currentIPs, err := a.getExistingIPs(ctx, domain, recordType)
+	if err != nil {
+		return fmt.Errorf(
+			"error getting existing %s records: %w",
+			recordType,
+			err,
+		)
+	}
+
 	recordName := a.getRecordName(domain)
 
 	if len(ips) == 0 {
-		// If no healthy IPs, delete the record entirely
 		if len(currentIPs) == 0 {
-			// There's no existing record, nothing to do
 			return nil
 		}
 
-		slog.DebugContext(ctx, "No healthy IPs, deleting record", slog.String("recordName", recordName))
-		err = a.deleteRecord(ctx, recordName)
-		if err != nil {
-			return fmt.Errorf("error deleting record for domain %s: %w", domain, err)
+		slog.DebugContext(
+			ctx,
+			"No healthy IPs, deleting record",
+			slog.String("recordName", recordName),
+			slog.String("recordType", recordType),
+		)
+
+		if err = a.deleteRecord(ctx, recordName, recordType); err != nil {
+			return fmt.Errorf(
+				"error deleting %s record for domain %s: %w",
+				recordType,
+				domain,
+				err,
+			)
 		}
 
 		return nil
 	}
 
-	// Check if the old list and new list are the same
-	// Because the lists could be in a different order, we sort them first (the lists are generally very small)
-	diff := len(ips) != len(currentIPs)
-	if !diff {
-		slices.Sort(ips)
-		slices.Sort(currentIPs)
-		diff = !slices.Equal(ips, currentIPs)
+	desired := append([]string(nil), ips...)
+	current := append([]string(nil), currentIPs...)
+
+	slices.Sort(desired)
+	slices.Sort(current)
+
+	if slices.Equal(desired, current) {
+		return nil
 	}
 
-	// Update if there's any difference
-	if diff {
-		// Create or update record with healthy IPs
-		slog.DebugContext(ctx, "Creating/updating record with healthy IPs", slog.String("recordName", recordName), slog.Any("ips", ips))
-		err = a.createOrUpdateRecord(ctx, recordName, ips, ttl)
-		if err != nil {
-			return fmt.Errorf("error creating/updating record for domain %s: %w", domain, err)
-		}
+	slog.DebugContext(
+		ctx,
+		"Creating/updating record with healthy IPs",
+		slog.String("recordName", recordName),
+		slog.String("recordType", recordType),
+		slog.Any("ips", ips),
+	)
+
+	if err = a.createOrUpdateRecord(
+		ctx,
+		recordName,
+		recordType,
+		ips,
+		ttl,
+	); err != nil {
+		return fmt.Errorf(
+			"error creating/updating %s record for domain %s: %w",
+			recordType,
+			domain,
+			err,
+		)
 	}
 
 	return nil
@@ -159,12 +221,18 @@ type azureARecord struct {
 	IPv4Address string `json:"ipv4Address"`
 }
 
+// azureAAAARecord represents an AAAA record from the Azure DNS API.
+type azureAAAARecord struct {
+	IPv6Address string `json:"ipv6Address"`
+}
+
 // azureRecordProperties represents a record's properties from the Azure DNS API
 //
 //nolint:tagliatelle
 type azureRecordProperties struct {
-	TTL      int            `json:"TTL"`
-	ARecords []azureARecord `json:"ARecords"`
+	TTL         int               `json:"TTL"`
+	ARecords    []azureARecord    `json:"ARecords,omitempty"`
+	AAAARecords []azureAAAARecord `json:"AAAARecords,omitempty"`
 }
 
 // azureRecord represents a DNS record from Azure DNS API
@@ -216,8 +284,11 @@ func (a *AzureProvider) getAccessToken(parentCtx context.Context) (string, error
 	return token.Token, nil
 }
 
-func (a *AzureProvider) getExistingIPs(ctx context.Context, domain string) ([]string, error) {
-	start := time.Now()
+func (a *AzureProvider) getExistingIPs(
+	ctx context.Context,
+	domain string,
+	recordType string,
+) ([]string, error) {	start := time.Now()
 	var success bool
 	if a.metrics != nil {
 		defer func() {
@@ -238,8 +309,11 @@ func (a *AzureProvider) getExistingIPs(ctx context.Context, domain string) ([]st
 
 	recordName := a.getRecordName(domain)
 	baseURL := fmt.Sprintf(
-		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/A",
-		a.subscriptionID, a.resourceGroupName, a.zoneName,
+		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/%s",
+		a.subscriptionID,
+		a.resourceGroupName,
+		a.zoneName,
+		recordType,
 	)
 
 	// Add query parameters
@@ -276,15 +350,18 @@ func (a *AzureProvider) getExistingIPs(ctx context.Context, domain string) ([]st
 
 	// Get the list of A IPs
 	var ips []string
-	if len(response.Value) > 0 {
-		for _, r := range response.Value {
-			if len(r.Properties.ARecords) == 0 || r.Name != recordName {
-				continue
-			}
+	for _, record := range response.Value {
+		if record.Name != recordName {
+			continue
+		}
 
-			ips = slices.Grow(ips, len(r.Properties.ARecords))
-			for _, aRecord := range r.Properties.ARecords {
-				ips = append(ips, aRecord.IPv4Address)
+		if recordType == recordTypeA {
+			for _, item := range record.Properties.ARecords {
+				ips = append(ips, item.IPv4Address)
+			}
+		} else {
+			for _, item := range record.Properties.AAAARecords {
+				ips = append(ips, item.IPv6Address)
 			}
 		}
 	}
@@ -293,7 +370,13 @@ func (a *AzureProvider) getExistingIPs(ctx context.Context, domain string) ([]st
 	return ips, nil
 }
 
-func (a *AzureProvider) createOrUpdateRecord(ctx context.Context, recordName string, ips []string, ttl int) error {
+func (a *AzureProvider) createOrUpdateRecord(
+	ctx context.Context,
+	recordName string,
+	recordType string,
+	ips []string,
+	ttl int,
+) error {
 	start := time.Now()
 	var success bool
 	if a.metrics != nil {
@@ -315,25 +398,40 @@ func (a *AzureProvider) createOrUpdateRecord(ctx context.Context, recordName str
 		return fmt.Errorf("error getting access token: %w", err)
 	}
 
-	url := fmt.Sprintf(
-		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/A/%s?api-version=2018-05-01",
-		a.subscriptionID, a.resourceGroupName, a.zoneName, recordName,
+	requestURL := fmt.Sprintf(
+		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/%s/%s?api-version=2018-05-01",
+		a.subscriptionID,
+		a.resourceGroupName,
+		a.zoneName,
+		recordType,
+		recordName,
 	)
 
-	// Build A records
-	aRecords := make([]azureARecord, len(ips))
-	for i, ip := range ips {
-		aRecords[i] = azureARecord{
-			IPv4Address: ip,
-		}
+	properties := azureRecordProperties{
+		TTL: ttl,
 	}
 
-	recordSet := azureRecordSet{
-		Properties: azureRecordProperties{
-			TTL:      ttl,
-			ARecords: aRecords,
-		},
+	if recordType == recordTypeA {
+		properties.ARecords = make([]azureARecord, len(ips))
+
+		for i, ip := range ips {
+			properties.ARecords[i] = azureARecord{
+				IPv4Address: ip,
+			}
+		}
+	} else {
+	properties.AAAARecords = make([]azureAAAARecord, len(ips))
+
+	for i, ip := range ips {
+		properties.AAAARecords[i] = azureAAAARecord{
+			IPv6Address: ip,
+		}
 	}
+}
+
+recordSet := azureRecordSet{
+	Properties: properties,
+}
 
 	jsonData, err := json.Marshal(recordSet)
 	if err != nil {
@@ -365,7 +463,11 @@ func (a *AzureProvider) createOrUpdateRecord(ctx context.Context, recordName str
 	return nil
 }
 
-func (a *AzureProvider) deleteRecord(ctx context.Context, recordName string) error {
+func (a *AzureProvider) deleteRecord(
+	ctx context.Context,
+	recordName string,
+	recordType string,
+) error {
 	start := time.Now()
 	var success bool
 	if a.metrics != nil {
@@ -386,9 +488,20 @@ func (a *AzureProvider) deleteRecord(ctx context.Context, recordName string) err
 		return fmt.Errorf("error getting access token: %w", err)
 	}
 
-	url := fmt.Sprintf(
-		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/A/%s?api-version=2018-05-01",
-		a.subscriptionID, a.resourceGroupName, a.zoneName, recordName,
+	requestURL := fmt.Sprintf(
+		"https://management.azure.com/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/dnsZones/%s/%s/%s?api-version=2018-05-01",
+		a.subscriptionID,
+		a.resourceGroupName,
+		a.zoneName,
+		recordType,
+		recordName,
+	)
+
+	req, err := http.NewRequestWithContext(
+	reqCtx,
+	http.MethodDelete,
+	requestURL,
+	nil,
 	)
 
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
