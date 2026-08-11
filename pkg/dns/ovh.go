@@ -291,7 +291,8 @@ func (o *OVHProvider) createRecord(ctx context.Context, domain, ip string, ttl i
 		TTL:       ttl,
 	}
 
-	err = o.performJSONRequest(ctx, http.MethodPost, url, record, nil)	if err != nil {
+	err = o.performJSONRequest(ctx, http.MethodPost, url, record, nil)
+	if err != nil {
 		return err
 	}
 
