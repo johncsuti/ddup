@@ -67,19 +67,37 @@ func TestOVHProviderIPv6(t *testing.T) {
 	mockTransport.SetResponse(
 		http.MethodGet,
 		"/1.0/domain/zone/example.com/record?fieldType=A&subDomain=ipv6",
-		&MockResponse{StatusCode: 200, Body: `[]`},
+		&MockResponse{
+			StatusCode: 200,
+			Body:       `[]`,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+		},
 	)
 
 	mockTransport.SetResponse(
 		http.MethodGet,
 		"/1.0/domain/zone/example.com/record?fieldType=AAAA&subDomain=ipv6",
-		&MockResponse{StatusCode: 200, Body: `[]`},
+		&MockResponse{
+			StatusCode: 200,
+			Body:       `[]`,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+		},
 	)
 
 	mockTransport.SetResponse(
 		http.MethodPost,
 		"/1.0/domain/zone/example.com/record",
-		&MockResponse{StatusCode: 200, Body: `{}`},
+		&MockResponse{
+			StatusCode: 200,
+			Body:       `{}`,
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+		},
 	)
 
 	err := provider.UpdateRecords(
