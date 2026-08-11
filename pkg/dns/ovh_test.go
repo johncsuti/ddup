@@ -187,7 +187,7 @@ func TestOVHProvider(t *testing.T) {
 
 		// Verify the requests were made
 		requests := mockTransport.GetRequests()
-		require.Len(t, requests, 6) // GET (list), GET (details1), GET (details2), DELETE, POST
+		require.Len(t, requests, 6) // GET A list, GET AAAA list, GET details1, GET details2, DELETE, POST
 
 		// Verify we deleted the right record
 		deleteReq := requests[4]
