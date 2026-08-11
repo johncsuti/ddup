@@ -51,7 +51,8 @@ func (c *CloudflareProvider) Name() string {
 func (c *CloudflareProvider) UpdateRecords(ctx context.Context, domain string, ttl int, ips []string) error {
 	// Validate all desired addresses before making any provider changes.
 	for _, ip := range ips {
-		if _, err := recordTypeForIP(ip); err != nil {
+		_, err := recordTypeForIP(ip)
+		if err != nil {
 			return err
 		}
 	}
