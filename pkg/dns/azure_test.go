@@ -60,8 +60,8 @@ func TestAzureProvider(t *testing.T) {
 
 		// Verify the requests were made
 		requests := mockTransport.GetRequests()
-		require.Len(t, requests, 2) // Should have made 2 requests: GET and PUT
-
+		require.Len(t, requests, 3) // GET A, PUT A, GET AAAA
+		
 		// Verify the GET request
 		getReq := requests[0]
 		assert.Equal(t, http.MethodGet, getReq.Method)
@@ -122,8 +122,8 @@ func TestAzureProvider(t *testing.T) {
 
 		// Verify the requests were made
 		requests := mockTransport.GetRequests()
-		require.Len(t, requests, 2) // Should have made 2 requests: GET and DELETE
-
+		require.Len(t, requests, 3) // GET A, DELETE A, GET AAAA
+		
 		// Verify the DELETE request
 		deleteReq := requests[1]
 		assert.Equal(t, http.MethodDelete, deleteReq.Method)
@@ -156,8 +156,8 @@ func TestAzureProvider(t *testing.T) {
 
 		// Verify the requests were made
 		requests := mockTransport.GetRequests()
-		require.Len(t, requests, 1) // Should have made GET request only
-
+		require.Len(t, requests, 2) // GET A and GET AAAA
+		
 		// Verify the GET request
 		getReq := requests[0]
 		assert.Equal(t, http.MethodGet, getReq.Method)
@@ -207,8 +207,8 @@ func TestAzureProvider(t *testing.T) {
 
 		// Verify the requests were made
 		requests := mockTransport.GetRequests()
-		require.Len(t, requests, 2) // Should have made 2 requests: GET and PUT
-
+		require.Len(t, requests, 3) // GET A, PUT A, GET AAAA
+		
 		// Verify the PUT request body
 		putReq := requests[1]
 		body, err := io.ReadAll(putReq.Body)
@@ -270,7 +270,7 @@ func TestAzureProvider(t *testing.T) {
 
 		// Verify the requests were made
 		requests := mockTransport.GetRequests()
-		require.Len(t, requests, 1) // Should have made GET request only
+		require.Len(t, requests, 2) // GET A and GET AAAA
 
 		// Verify the GET request
 		getReq := requests[0]
