@@ -106,12 +106,7 @@ func (a *AzureProvider) Name() string {
 }
 
 // UpdateRecords updates DNS A and AAAA records for the given domain with the provided IPs.
-func (a *AzureProvider) UpdateRecords(
-	ctx context.Context,
-	domain string,
-	ttl int,
-	ips []string,
-) error {
+func (a *AzureProvider) UpdateRecords(ctx context.Context, domain string, ttl int, ips []string) error {
 	ipv4, ipv6, err := splitIPs(ips)
 	if err != nil {
 		return err
@@ -228,7 +223,6 @@ type azureAAAARecord struct {
 
 // azureRecordProperties represents a record's properties from the Azure DNS API
 //
-//nolint:tagliatelle
 type azureRecordProperties struct {
 	TTL         int               `json:"TTL"`
 	ARecords    []azureARecord    `json:"ARecords,omitempty"`
